@@ -1,0 +1,64 @@
+import pickle
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+columns = ['mom', 'ss', 'fm']
+kfactor_raw = pickle.load(open("kfactor_data_application.pickle", "rb"))
+
+def process_raw_data():
+    """
+    Process the raw data and convert into Pandas dataframe with the columns:
+    * 0, 1, 2 - correspond to raw data from MoM, S/S, F/M
+    * per_mom, per_ss, per_fm - correspond to PER value of int(raw data)
+    * err_mom, err_ss, err_fm - True if the PER is >1e-8 && <1e-6, False otherwise.
+    """
+    kfactor_raw = pd.read_csv('KFactorComparison2.txt', delimiter="\s+", header=None)
+    per = {}
+    per['mom'] = pd.read_csv('PER_Narrowband.txt', sep='\s+', header=None, index_col=0)
+    per['ss'] = pd.read_csv('Strongest_Sum.txt', sep='\s+', header=None, index_col=0)
+    per['fm'] = pd.read_csv('First_Mean.txt', sep='\s+', header=None, index_col=0)
+    for colidx, col in enumerate(columns):
+        kfactor_raw['per'+col] = kfactor_raw[colidx].apply(lambda x: per[col].at[int(x),1])
+    for col in columns:
+        kfactor_raw['err'+col] = kfactor_raw['per'+col].apply(lambda x: x>1e-8 and x<1e-6)
+    return kfactor_raw
+
+# Percentage of violations
+violations = kfactor_raw['errmom'].value_counts()
+if False in violations:
+    violations = violations[False]
+else:
+    violations = 0
+print(f"MoM violations: {violations/len(kfactor_raw)*100:.2f}%")
+violations = kfactor_raw['errss'].value_counts()
+if False in violations:
+    violations = violations[False]
+else:
+    violations = 0
+print(f"S/S violations: {violations/len(kfactor_raw)*100:.2f}%")
+violations = kfactor_raw['errfm'].value_counts()
+if False in violations:
+    violations = violations[False]
+else:
+    violations = 0
+print(f"F/M violations: {violations/len(kfactor_raw)*100:.2f}")
+mom_and_fm_violations = (kfactor_raw['errmom'] | kfactor_raw['errfm']).value_counts()[False]
+mom_and_fm_valid = (kfactor_raw['errmom'] & kfactor_raw['errfm']).value_counts()[True]
+print(f"MoM and F/M violations at same sample: {mom_and_fm_violations/len(kfactor_raw)*100:.2f}%")
+print(f"MoM and F/M valid at same sample: {mom_and_fm_valid/len(kfactor_raw)*100:.2f}%")
+
+# Plot a sample of the data
+for col in columns:
+    kfactor_raw[4700:5700]['per'+col].plot()
+plt.yscale('log')
+ylim = plt.ylim()
+# Mark the violation area, >= 1e-6 and <= 1e-8
+plt.fill_between([4700,5700], [ylim[1], ylim[1]], [1e-6, 1e-6], color=(1,0,0, 0.3))
+plt.fill_between([4700,5700], [ylim[0], ylim[0]], [1e-8, 1e-8], color=(1,0,0, 0.3))
+plt.legend(['MoM', 'Strongest/sum', 'First/mean'], frameon=True)
+plt.xlabel('Sample number')
+plt.ylabel('PER')
+plt.tight_layout()
+plt.show()
+#plt.savefig('estimator_per_values.pdf', dpi=150)
